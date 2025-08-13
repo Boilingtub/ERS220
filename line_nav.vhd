@@ -21,3 +21,15 @@ begin
 	F <= not( (W and Y and not(Z)) or (Z and (W xor X) ) or (X and not(Y) and Z) );
 	C <= not( W and X and Y and Z );
 end line_nav_arch;
+
+-- Pin Layout:
+-- C .... PIN_C17
+-- F .... PIN_D15
+-- S .... PIN_C14
+-- St ... PIN_C16
+-- Tl ... PIN_D17
+-- Tr ... PIN_E15
+-- W .... PIN_C12
+-- X .... PIN_D12
+-- Y .... PIN_C11
+-- Z .... PIN_C10
