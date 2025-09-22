@@ -7,10 +7,10 @@ port (
 	RO, RES, LD  : in std_logic;
 	SW_state: in std_logic_vector(1 downto 0);
 	SW_game: in std_logic_vector(2 downto 0);
-	SW_bo3: in std_logic;
+	SW_comb: in std_logic;
+	SW_lfc: in std_logic;
 	LED: out std_logic_vector(9 downto 0);
 	Hex5,Hex4,Hex3,Hex2,Hex1,Hex0 : out std_logic_vector(6 downto 0)
-	--o_Tac : out std_logic
 );
 end lab2;
 -- tac = Toss-a-coin , rps = Rock-paper-scissors, rad = roll-a-dice, nog = no-game
@@ -19,6 +19,11 @@ architecture lab2_arc of lab2 is
 	-- signal Prev_State,New_State : state_type;
 	signal Prev_state, Next_state: std_logic_vector(1 downto 0);
 	
+	signal RO_LFC: std_logic;
+	signal CLK: std_logic;
+	signal clk_div: unsigned(24 downto 0);
+	
+	signal Update: std_logic;
 	
 	constant ST_nog: std_logic_vector(1 downto 0) := "00";
 	constant ST_tac: std_logic_vector(1 downto 0) := "01";
@@ -56,8 +61,9 @@ architecture lab2_arc of lab2 is
 	signal LDd : std_logic;
 	signal f_win: std_logic;
 	signal prev_f_win: std_logic;
-	signal allow_count: std_logic;
 	signal score: std_logic_vector(7 downto 0);
+	
+	signal comb_excl_win: std_logic;
 
 	signal Q,S : std_logic_vector(7 downto 0);
 
@@ -131,11 +137,11 @@ begin
 	
 	tac_mux: mux3t1
 	port MAP (
-		A => Q(7) & Q(6) & Q(5),
+		A => Q(7 downto 5),
 		O => f_Tac
 	);
 	
-
+	tac_win <= not(f_Tac xor SW_game(2));
 	tac_win_mux: mux1t7
 	port MAP (
 		D0 => lose,
@@ -162,22 +168,26 @@ begin
 	
 	rps_decoder: decoder2t4
 	port MAP (
-		A => Q(4) & Q(3),
+		A => Q(4 downto 3),
 		O => f_Rps
 	);
 	
 	rps_hum_fowl_detect: fowl_detect
 	port MAP(
-		A => SW_game(2) & SW_game(1) & SW_game(0),
+		A => SW_game(2 downto 0),
 		O => Rps_hum_fowl
 	);
 	
 	rps_cpu_fowl_detect: fowl_detect
 	port MAP(
-		A => f_Rps(2) & f_Rps(1) & f_Rps(0),
+		A => f_Rps(2 downto 0),
 		O => Rps_cpu_fowl
 	);
 	
+	Rps_tie <= 	(f_Rps(2) and SW_game(2) and not(Rps_hum_fowl)) or 
+										(f_Rps(1) and SW_game(1) and not(Rps_hum_fowl)) or 
+										(f_Rps(0) and SW_game(0) and not(Rps_hum_fowl)) or 
+										(Rps_hum_fowl and Rps_cpu_fowl);
 	rps_win <= not(Rps_hum_fowl) and (Rps_cpu_fowl or 
 					(	
 						(f_Rps(2) and SW_game(1)) or
@@ -204,7 +214,7 @@ begin
 		D5 => fowl,--101
 		D6 => fowl,--110
 		D7 => fowl,--111
-		A => SW_game(2) & SW_Game(1) & SW_game(0),
+		A => SW_game(2 downto 0),
 		O => Rps_hum_Hex
 	);
 	
@@ -218,7 +228,7 @@ begin
 		D5 => fowl,--101
 		D6 => fowl,--110
 		D7 => fowl,--111
-		A => f_Rps(2) & f_Rps(1) & f_Rps(0),
+		A => f_Rps(2 downto 0),
 		O => Rps_cpu_Hex
 	);
 	
@@ -241,13 +251,13 @@ begin
 	
 	rad_hum_mux: Seg7
 	port MAP(
-		A => Q(2) & Q(1) & Q(0),
+		A => SW_game(2 downto 0),
 		O => Rad_hum_Hex
 	);
 	
 	rad_cpu_mux: Seg7
 	port Map(
-		A => SW_game(2) & SW_Game(1) & SW_game(0),
+		A => Q(2 downto 0),
 		O => Rad_cpu_Hex
 	);
 	
@@ -257,11 +267,25 @@ begin
 		O0 => Hex0,
 		O1 => Hex1
 	);
+				 
+	lfc: process(RO)
+	begin
+		if(rising_edge(RO)) then
+			clk_div <= clk_div + 1;
+		end if;
+	end process lfc;
+	RO_LFC <= clk_div(24);
+	LED(0) <= CLK;
 	
-	sync: process(RO,RES)
+	with SW_lfc select
+	CLK <= RO when '0',
+			RO_LFC when '1',
+			RO when others;
+	
+	sync: process(CLK,RES)
 	begin	
 		if (RES = '1') then
-			LED <= "0000000000";
+			LED(9 downto 1) <= "000000000";
 			Hex5 <= "1111111";
 			Hex4 <= "1111111";
 			Hex3 <= "1111111";
@@ -269,43 +293,52 @@ begin
 			Prev_State <= ST_nog;
 			S <= "11111111";
 			score <= "00000000";
-		elsif (rising_edge(RO)) then
+		elsif (rising_edge(CLK)) then
 				Prev_state <= Next_state;
 				S <= S(6 downto 0) & ( S(5) xor S(4) );				
 				if(LDd = '0' and  LD_Prev_State = '1') then
-					case Prev_state is
-						when ST_tac => 
+					-- LED <= '0' & '0' & Q(7 downto 0);
+					if(SW_comb = '0') then
+						case Prev_state is
+							when ST_tac => 
+								LED(9) <= f_Tac;
+								Hex5 <= Tac_hum_Hex;
+								Hex4 <= Tac_cpu_Hex;
+								Hex3 <= Tac_win_Hex;		
 							
-							LED <= '0' & '0' & Q(7 downto 0);
-							LED(9) <= f_Tac;
-							Hex5 <= Tac_hum_Hex;
-							Hex4 <= Tac_cpu_Hex;
-							Hex3 <= Tac_win_Hex;		
+							when ST_rps =>
+								LED(9 downto 7) <= f_Rps(2 downto 0);
+								Hex5 <= Rps_hum_Hex;
+								Hex4 <= Rps_cpu_Hex;
+								if(Rps_tie = '0') then
+									Hex3 <= Rps_win_Hex;
+								else
+									Hex3 <= tails; -- means "tie" (same symbol as tails)
+								end if;
+								
+							when ST_rad =>
+								Hex5 <= Rad_hum_Hex;
+								Hex4 <= Rad_cpu_Hex;
+								Hex3 <= Rad_win_Hex;
+								
+							when others =>	
+						end case;
 						
-						when ST_rps =>
-							LED <= '0' & '0' & Q(7 downto 0);
-							Hex5 <= Rps_hum_Hex;
-							Hex4 <= Rps_cpu_Hex;
-							if(Rps_tie = '0') then
-								Hex3 <= Rps_win_Hex;
-							else
-								Hex3 <= tails; -- means "tie" (same symbol as tails)
-							end if;
-							
-						when ST_rad =>
-							LED <= '0' & '0' & Q(7 downto 0);
-							Hex5 <= Rad_hum_Hex;
-							Hex4 <= Rad_cpu_Hex;
-							Hex3 <= Rad_win_Hex;
-							
-						when others =>
-							
-					end case;
-					if (f_win = '1') then
-						score <= std_logic_vector(unsigned(score)+1);
+						if (f_win = '1') then
+							score <= std_logic_vector(unsigned(score)+1);
+						end if;
+						
+					else
+						LED(6) <= f_Tac;
+						LED(9 downto 7) <= f_Rps(2 downto 0);
+						Hex5 <= Rad_cpu_Hex;
+						if(comb_excl_win = '1') then
+							Hex3 <= win;
+						else
+							Hex3 <= lose;
+						end if;	
 					end if;
 				end if;
-
 				LD_Prev_State <= LDd;
 				prev_f_win <= f_win;
 		end if;	
@@ -315,13 +348,13 @@ begin
 	begin				
 		if( RES = '1') then
 			Next_state <= ST_nog;
-		else
+		elsif (SW_comb = '0') then
 			case Prev_State is
 				when ST_nog =>
 					f_win <= '0';
+					Update <= '0';
 					if (LDd = '1' and LD_Prev_State = '0') then
 						Q <= S;
-						tac_win <= not(f_Tac xor SW_game(2));
 						Next_state <= SW_state;
 					else
 						Next_state <= ST_nog;
@@ -329,40 +362,48 @@ begin
 					
 				when ST_tac =>
 					if(LDd = '0' and LD_Prev_State = '1') then
+						Update <= '1';
 						f_win <= tac_win;
 						Next_state <= ST_nog;
 					else 
 						f_win <= '0';
+						Update <= '0';
 						Next_state <= ST_tac;
 					end if;
 								
 				when ST_rps => 
-					if(LDd = '0') then
-						Q <= S;
+					if(LDd = '0'and LD_Prev_State = '1') then
+						Update <= '1';
 						f_win <= rps_win;
-						Rps_tie <= 	(f_Rps(2) and SW_game(2) and not(Rps_hum_fowl)) or 
-										(f_Rps(1) and SW_game(1) and not(Rps_hum_fowl)) or 
-										(f_Rps(0) and SW_game(0) and not(Rps_hum_fowl)) or 
-										(Rps_hum_fowl and Rps_cpu_fowl);
 						Next_state <= ST_nog;
 					else
+						f_win <= '0';
+						Update <= '0';
 						Next_state <= ST_rps;
 					end if;
 					
 				when ST_rad => 
-					if (LDd = '0') then
-						Q <= S;
+					if (LDd = '0' and LD_Prev_State = '1') then
+						Update <= '1';
 						f_win <= rad_win;
 						Next_state <= ST_nog;
 					else
+						f_win <= '0';
+						Update <= '0';
 						Next_state <= ST_rad;
 					end if;
 						
 				when others => 
 					Next_state <= ST_nog;
 			end case;
+		else
+			if(LDd = '0' and LD_Prev_State = '1') then
+				Q <= S;
+				comb_excl_win <= (f_Tac and Rps_Tie) or (f_Tac and rps_win and not(Rps_Tie));
+			end if;
 		end if;
 	end process comb;
+	
 end lab2_arc;
 
 library ieee;
@@ -565,4 +606,3 @@ begin
 end process;
 O <= O1 and O2 and O3;
 end soft_debounce_arc;
-
