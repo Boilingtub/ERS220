@@ -9,6 +9,7 @@ port (
 	SW_game: in std_logic_vector(2 downto 0);
 	SW_comb: in std_logic;
 	SW_lfc: in std_logic;
+	CLK_out: out std_logic;
 	LED: out std_logic_vector(9 downto 0);
 	Hex5,Hex4,Hex3,Hex2,Hex1,Hex0 : out std_logic_vector(6 downto 0)
 );
@@ -23,7 +24,7 @@ architecture lab2_arc of lab2 is
 	signal CLK: std_logic;
 	signal clk_div: unsigned(24 downto 0);
 	
-	signal Update: std_logic;
+	--signal Update: std_logic;
 	
 	constant ST_nog: std_logic_vector(1 downto 0) := "00";
 	constant ST_tac: std_logic_vector(1 downto 0) := "01";
@@ -51,7 +52,7 @@ architecture lab2_arc of lab2 is
 	signal Rps_cpu_Hex: std_logic_vector(6 downto 0);
 	signal Rps_hum_Hex: std_logic_vector(6 downto 0);
 	
-	signal f_Rad: std_logic_vector(6 downto 0);
+	--signal f_Rad: std_logic_vector(6 downto 0);
 	signal rad_win: std_logic;
 	signal Rad_win_Hex: std_logic_vector(6 downto 0);
 	signal Rad_hum_Hex: std_logic_vector(6 downto 0);
@@ -241,6 +242,7 @@ begin
 			not(Rad_hum_Hex(5) xor Rad_cpu_Hex(5)) and
 			not(Rad_hum_Hex(6) xor Rad_cpu_Hex(6))
 		);
+
 	rad_win_mux: mux1t7
 	port MAP(
 		D0 => lose,
@@ -281,6 +283,7 @@ begin
 	CLK <= RO when '0',
 			RO_LFC when '1',
 			RO when others;
+	CLK_out <= CLK;
 	
 	sync: process(CLK,RES)
 	begin	
@@ -352,7 +355,7 @@ begin
 			case Prev_State is
 				when ST_nog =>
 					f_win <= '0';
-					Update <= '0';
+					--Update <= '0';
 					if (LDd = '1' and LD_Prev_State = '0') then
 						Q <= S;
 						Next_state <= SW_state;
@@ -362,34 +365,34 @@ begin
 					
 				when ST_tac =>
 					if(LDd = '0' and LD_Prev_State = '1') then
-						Update <= '1';
+						--Update <= '1';
 						f_win <= tac_win;
 						Next_state <= ST_nog;
 					else 
 						f_win <= '0';
-						Update <= '0';
+						--Update <= '0';
 						Next_state <= ST_tac;
 					end if;
 								
 				when ST_rps => 
 					if(LDd = '0'and LD_Prev_State = '1') then
-						Update <= '1';
+						--Update <= '1';
 						f_win <= rps_win;
 						Next_state <= ST_nog;
 					else
 						f_win <= '0';
-						Update <= '0';
+						--Update <= '0';
 						Next_state <= ST_rps;
 					end if;
 					
 				when ST_rad => 
 					if (LDd = '0' and LD_Prev_State = '1') then
-						Update <= '1';
+						--Update <= '1';
 						f_win <= rad_win;
 						Next_state <= ST_nog;
 					else
 						f_win <= '0';
-						Update <= '0';
+						--Update <= '0';
 						Next_state <= ST_rad;
 					end if;
 						
